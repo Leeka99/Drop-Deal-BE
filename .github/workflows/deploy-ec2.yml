@@ -90,14 +90,16 @@ jobs:
 
           ${DOCKER} version
           if ! ${DOCKER} compose version >/dev/null 2>&1; then
-            if command -v dnf >/dev/null 2>&1; then
-              sudo dnf install -y curl
-            elif command -v apt-get >/dev/null 2>&1; then
-              sudo apt-get update
-              sudo apt-get install -y curl
-            else
-              echo "docker compose plugin is missing and no supported package manager was found to install curl." >&2
-              exit 1
+            if ! command -v curl >/dev/null 2>&1; then
+              if command -v dnf >/dev/null 2>&1; then
+                sudo dnf install -y curl-minimal
+              elif command -v apt-get >/dev/null 2>&1; then
+                sudo apt-get update
+                sudo apt-get install -y curl
+              else
+                echo "docker compose plugin is missing and no supported package manager was found to install curl." >&2
+                exit 1
+              fi
             fi
 
             ARCH="$(uname -m)"
