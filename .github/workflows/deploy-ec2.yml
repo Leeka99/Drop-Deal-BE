@@ -82,7 +82,15 @@ jobs:
             exit 1
           fi
 
-          docker compose up -d --build
-          docker image prune -f
-          docker compose ps
+          if docker info >/dev/null 2>&1; then
+            DOCKER="docker"
+          else
+            DOCKER="sudo docker"
+          fi
+
+          ${DOCKER} version
+          ${DOCKER} compose version
+          ${DOCKER} compose up -d --build
+          ${DOCKER} image prune -f
+          ${DOCKER} compose ps
           EOF
