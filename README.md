@@ -50,6 +50,30 @@ macOS/Linux:
 http://localhost:8080
 ```
 
+## 운영 환경 변수
+
+`prod` 프로필은 PostgreSQL RDS에 연결합니다. 민감 정보는 파일에 저장하지 않고 환경변수로 주입합니다.
+
+```env
+SPRING_PROFILES_ACTIVE=prod
+DB_URL=jdbc:postgresql://dropdeal-db-instance-1.c1qesycswhwe.ap-northeast-2.rds.amazonaws.com:5432/postgres
+DB_USERNAME=postgres
+DB_PASSWORD=your-password
+CORS_ALLOWED_ORIGINS=https://dropdealkr.com
+SWAGGER_ENABLED=false
+```
+
+운영 실행 예시:
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="prod"
+$env:DB_URL="jdbc:postgresql://dropdeal-db-instance-1.c1qesycswhwe.ap-northeast-2.rds.amazonaws.com:5432/postgres"
+$env:DB_USERNAME="postgres"
+$env:DB_PASSWORD="your-password"
+$env:CORS_ALLOWED_ORIGINS="https://dropdealkr.com"
+.\gradlew.bat bootRun
+```
+
 ## Swagger
 
 Swagger UI:
@@ -142,6 +166,56 @@ IntelliJ에서 자동 재시작을 사용하려면 다음 설정을 켭니다.
 ```powershell
 .\gradlew.bat test
 .\gradlew.bat build
+```
+
+## Docker
+
+Docker Compose 실행:
+
+```powershell
+docker compose up --build
+```
+
+백그라운드 실행:
+
+```powershell
+docker compose up -d --build
+```
+
+종료:
+
+```powershell
+docker compose down
+```
+
+데이터 볼륨까지 삭제:
+
+```powershell
+docker compose down -v
+```
+
+이미지 빌드:
+
+```powershell
+docker build -t dropdeal-be:local .
+```
+
+로컬 프로필 실행:
+
+```powershell
+docker run --rm -p 8080:8080 dropdeal-be:local
+```
+
+운영 프로필 실행:
+
+```powershell
+docker run --rm -p 8080:8080 `
+  -e SPRING_PROFILES_ACTIVE=prod `
+  -e DB_URL="jdbc:postgresql://dropdeal-db-instance-1.c1qesycswhwe.ap-northeast-2.rds.amazonaws.com:5432/postgres" `
+  -e DB_USERNAME="postgres" `
+  -e DB_PASSWORD="your-password" `
+  -e CORS_ALLOWED_ORIGINS="https://dropdealkr.com" `
+  dropdeal-be:local
 ```
 
 ## Git 제외 대상
