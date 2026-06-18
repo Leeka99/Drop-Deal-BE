@@ -91,14 +91,29 @@ jobs:
           ${DOCKER} version
           if ! ${DOCKER} compose version >/dev/null 2>&1; then
             if command -v dnf >/dev/null 2>&1; then
-              sudo dnf install -y docker-compose-plugin
+              sudo dnf install -y curl
             elif command -v apt-get >/dev/null 2>&1; then
               sudo apt-get update
-              sudo apt-get install -y docker-compose-plugin
+              sudo apt-get install -y curl
             else
-              echo "docker compose plugin is missing and no supported package manager was found." >&2
+              echo "docker compose plugin is missing and no supported package manager was found to install curl." >&2
               exit 1
             fi
+
+            ARCH="$(uname -m)"
+            case "${ARCH}" in
+              x86_64) COMPOSE_ARCH="x86_64" ;;
+              aarch64|arm64) COMPOSE_ARCH="aarch64" ;;
+              *)
+                echo "Unsupported architecture for Docker Compose: ${ARCH}" >&2
+                exit 1
+                ;;
+            esac
+
+            sudo mkdir -p /usr/local/lib/docker/cli-plugins
+            sudo curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${COMPOSE_ARCH}" \
+              -o /usr/local/lib/docker/cli-plugins/docker-compose
+            sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
           fi
 
           ${DOCKER} compose version
