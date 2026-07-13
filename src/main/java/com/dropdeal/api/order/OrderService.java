@@ -1,6 +1,5 @@
 package com.dropdeal.api.order;
 
-import com.dropdeal.api.product.ProductService;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -18,18 +17,8 @@ public class OrderService {
     private static final String DEFAULT_ORDER_STATE = "공동구매 진행 중";
     private static final String CANCELED_ORDER_STATE = "주문 취소 및 환불 예정";
 
-    private final ProductService productService;
     private final List<GuestOrderResponse> guestOrders = new CopyOnWriteArrayList<>();
-    private final List<MemberOrderResponse> memberOrders;
-
-    public OrderService(ProductService productService) {
-        this.productService = productService;
-        this.memberOrders = new ArrayList<>(List.of(
-                new MemberOrderResponse("DD-260614-01842", productService.findById(1), 27000, 24000, DEFAULT_ORDER_STATE, 3000),
-                new MemberOrderResponse("DD-260614-01843", productService.findById(3), 23000, 19000, "차액 환불 완료", 4000),
-                new MemberOrderResponse("DD-260614-01844", productService.findById(4), 16000, 14000, "배송 중", 2000)
-        ));
-    }
+    private final List<MemberOrderResponse> memberOrders = new ArrayList<>();
 
     public GuestOrderResponse createGuestOrder(GuestOrderRequest request) {
         var order = new GuestOrderResponse(
