@@ -11,6 +11,7 @@ services:
     restart: unless-stopped
 
   backend:
+    image: ${BACKEND_IMAGE:-dropdeal-be-backend:local}
     build:
       context: .
       dockerfile: Dockerfile

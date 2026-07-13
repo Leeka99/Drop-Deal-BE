@@ -10,6 +10,10 @@ concurrency:
   group: deploy-ec2
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   test:
     name: Test
@@ -17,13 +21,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
+          cache: gradle
 
       - name: Run tests
         run: ./gradlew test
@@ -34,6 +39,32 @@ jobs:
     needs: test
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set image reference
+        run: echo "IMAGE_REF=ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}" >> "${GITHUB_ENV}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: ${{ env.IMAGE_REF }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Validate deploy secrets
         run: |
           test -n "${{ secrets.EC2_HOST }}" || (echo "Missing EC2_HOST secret" && exit 1)
@@ -58,9 +89,13 @@ jobs:
           EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
+          IMAGE_REF: ${{ env.IMAGE_REF }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ssh -i ~/.ssh/ec2_deploy_key "${EC2_USER}@${EC2_HOST}" \
-            "EC2_APP_DIR='${EC2_APP_DIR}' GITHUB_REPOSITORY='${GITHUB_REPOSITORY}' GITHUB_REF_NAME='${GITHUB_REF_NAME}' bash -s" <<'EOF'
+          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
+            -i ~/.ssh/ec2_deploy_key "${EC2_USER}@${EC2_HOST}" \
+            "EC2_APP_DIR='${EC2_APP_DIR}' GITHUB_REPOSITORY='${GITHUB_REPOSITORY}' GITHUB_REF_NAME='${GITHUB_REF_NAME}' IMAGE_REF='${IMAGE_REF}' GHCR_USER='${GHCR_USER}' GHCR_TOKEN='${GHCR_TOKEN}' bash -s" <<'EOF'
           set -euo pipefail
 
           REPO_URL="https://github.com/${GITHUB_REPOSITORY}.git"
@@ -120,32 +155,11 @@ jobs:
 
           ${DOCKER} compose version
 
-          ARCH="$(uname -m)"
-          case "${ARCH}" in
-            x86_64) BUILDX_ARCH="amd64" ;;
-            aarch64|arm64) BUILDX_ARCH="arm64" ;;
-            *)
-              echo "Unsupported architecture for Docker Buildx: ${ARCH}" >&2
-              exit 1
-              ;;
-          esac
+          printf '%s' "${GHCR_TOKEN}" | ${DOCKER} login ghcr.io -u "${GHCR_USER}" --password-stdin
+          trap '${DOCKER} logout ghcr.io >/dev/null 2>&1 || true' EXIT
 
-          BUILDX_URL="$(curl -fsSL https://api.github.com/repos/docker/buildx/releases/latest \
-            | grep "browser_download_url.*linux-${BUILDX_ARCH}" \
-            | cut -d '"' -f 4 \
-            | head -n 1)"
-
-          if [ -z "${BUILDX_URL}" ]; then
-            echo "Could not find Docker Buildx release for linux-${BUILDX_ARCH}." >&2
-            exit 1
-          fi
-
-          sudo mkdir -p /usr/local/lib/docker/cli-plugins
-          sudo curl -fsSL "${BUILDX_URL}" -o /usr/local/lib/docker/cli-plugins/docker-buildx
-          sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
-          ${DOCKER} buildx version
-
-          ${DOCKER} compose up -d --build
+          BACKEND_IMAGE="${IMAGE_REF}" ${DOCKER} compose pull
+          BACKEND_IMAGE="${IMAGE_REF}" ${DOCKER} compose up -d --no-build
           ${DOCKER} image prune -f
-          ${DOCKER} compose ps
+          BACKEND_IMAGE="${IMAGE_REF}" ${DOCKER} compose ps
           EOF
