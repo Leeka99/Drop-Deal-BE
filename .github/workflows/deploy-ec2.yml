@@ -156,8 +156,7 @@ jobs:
           fi
 
           git fetch origin "${GITHUB_REF_NAME}"
-          git checkout -B "${GITHUB_REF_NAME}" "origin/${GITHUB_REF_NAME}"
-          git pull --ff-only origin "${GITHUB_REF_NAME}"
+          git reset --hard "origin/${GITHUB_REF_NAME}"
 
           if [ ! -f .env ]; then
             echo "Missing ${EC2_APP_DIR}/.env. Create it from .env.example on EC2 before deploying." >&2

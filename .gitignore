@@ -20,6 +20,8 @@ application-*.local.properties
 uploads/
 storage/
 files/
+certbot/
+*.bak
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/

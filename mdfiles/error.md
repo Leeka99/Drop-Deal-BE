@@ -465,3 +465,26 @@ IAM 권한: 특정 보안 그룹의 규칙 추가와 제거로 제한
 ```
 
 이 구성으로 SSH 포트를 인터넷 전체에 상시 공개하지 않으면서 GitHub-hosted runner의 유동 IP에서도 자동 배포할 수 있습니다.
+
+## 12. EC2 로컬 변경으로 Git checkout 실패
+
+### 에러
+
+```text
+error: Your local changes to the following files would be overwritten by checkout:
+docker-compose.yml
+Please commit your changes or stash them before you switch branches.
+```
+
+### 원인
+
+EC2에서 HTTPS와 Certbot을 설정하면서 `docker-compose.yml`과 `nginx/default.conf`를 직접 수정했습니다. GitHub Actions가 새 커밋을 checkout하려 할 때 이 로컬 변경을 덮어쓸 수 있어 Git이 배포를 중단했습니다.
+
+### 해결
+
+- EC2에서 만든 443 포트, Certbot 볼륨, HTTP-to-HTTPS 리다이렉트, TLS 인증서 설정을 저장소에 반영했습니다.
+- `certbot/`과 `*.bak`은 Git에서 제외해 인증서와 서버 백업 파일이 커밋되지 않도록 했습니다.
+- 배포 시 `git fetch` 후 `git reset --hard origin/main`을 실행해 Git이 추적하는 설정 파일을 배포 커밋과 일치시킵니다.
+- `git clean`은 사용하지 않으므로 `.env`, Certbot 인증서, 백업 파일 등 EC2의 미추적 운영 파일은 삭제되지 않습니다.
+
+앞으로 `docker-compose.yml`이나 `nginx/default.conf` 같은 추적 파일은 EC2에서만 수정하지 않고 저장소에서 수정한 뒤 배포해야 합니다.
