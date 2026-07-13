@@ -8,6 +8,10 @@ import java.util.List;
 @Service
 public class SettlementService {
 
+    private final List<SettlementResponse> settlements = List.of();
+
+    // TODO: 실제 정산 데이터 연동 후 제거
+    /* 임시 데이터
     private final List<SettlementResponse> settlements = List.of(
             new SettlementResponse(
                     260601,
@@ -69,6 +73,7 @@ public class SettlementService {
                     )
             )
     );
+    */
 
     public List<SettlementResponse> findAll() {
         return settlements;
