@@ -37,6 +37,10 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     needs: test
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
 
     steps:
       - name: Checkout
@@ -78,9 +82,52 @@ jobs:
           printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_deploy_key
           chmod 600 ~/.ssh/ec2_deploy_key
 
-      - name: Add EC2 host key
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::381492209613:role/GitHubActionsDropDealDeploy
+          aws-region: ap-northeast-2
+
+      - name: Detect runner public IP
         run: |
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+          RUNNER_IP="$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')"
+          if [[ ! "${RUNNER_IP}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+            echo "Could not determine a valid runner IPv4 address." >&2
+            exit 1
+          fi
+          echo "RUNNER_CIDR=${RUNNER_IP}/32" >> "${GITHUB_ENV}"
+
+      - name: Allow runner SSH access
+        id: allow_runner_ssh
+        env:
+          SECURITY_GROUP_ID: sg-0f70c83f2bfb428d5
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id "${SECURITY_GROUP_ID}" \
+            --protocol tcp \
+            --port 22 \
+            --cidr "${RUNNER_CIDR}"
+
+      - name: Add EC2 host key
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if ssh-keyscan -T 30 -H "${EC2_HOST}" > /tmp/ec2_known_host; then
+              cat /tmp/ec2_known_host >> ~/.ssh/known_hosts
+              rm -f /tmp/ec2_known_host
+              exit 0
+            fi
+
+            rm -f /tmp/ec2_known_host
+            if [ "${attempt}" -lt 5 ]; then
+              echo "SSH host key scan failed (attempt ${attempt}/5). Retrying in 10 seconds..."
+              sleep 10
+            fi
+          done
+
+          echo "Could not retrieve the EC2 SSH host key after 5 attempts." >&2
+          exit 1
 
       - name: Deploy on EC2
         env:
@@ -163,3 +210,14 @@ jobs:
           ${DOCKER} image prune -f
           BACKEND_IMAGE="${IMAGE_REF}" ${DOCKER} compose ps
           EOF
+
+      - name: Revoke runner SSH access
+        if: ${{ always() && steps.allow_runner_ssh.outcome == 'success' }}
+        env:
+          SECURITY_GROUP_ID: sg-0f70c83f2bfb428d5
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "${SECURITY_GROUP_ID}" \
+            --protocol tcp \
+            --port 22 \
+            --cidr "${RUNNER_CIDR}"
